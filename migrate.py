@@ -122,7 +122,7 @@ def validate_migrations(defs: List[MigrationDef]) -> None:
 
 
 def transaction() -> psycopg2.extensions.connection:
-    return psycopg2.connect("dbname=hanson user=hanson_setup password=hanson_setup")
+    return psycopg2.connect("")
 
 
 class Migrator(NamedTuple):
@@ -210,21 +210,6 @@ class Migrator(NamedTuple):
 @click.group()
 def main() -> None:
     pass
-
-
-@main.command()
-def setup() -> None:
-    """
-    Create the database and roles. Must be run before running any migrations.
-    This is idempotent and therefore safe to run multiple times.
-    """
-    import os
-    import subprocess
-
-    os.putenv("PGUSER", "postgres")
-    os.putenv("PGPASSWORD", "postgres")
-    os.putenv("PGDATABASE", "postgres")
-    subprocess.run(args=["psql", "--file", "migrations/0000-initdb.psql"], check=True)
 
 
 @main.command()
