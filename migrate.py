@@ -15,7 +15,7 @@ Expects PGHOST to be set.
 
 from __future__ import annotations
 
-import click
+import argparse
 import os
 import psycopg2  # type: ignore
 import sys
@@ -207,26 +207,50 @@ class Migrator(NamedTuple):
             tx.commit()
 
 
-@click.group()
 def main() -> None:
-    pass
+    parser = argparse.ArgumentParser(
+        prog = "Henk",
+        description = "PostgreSQL schema migration tool.",
+    )
+
+    subparsers = parser.add_subparsers(dest = "subparser")
+
+    migrate_parser = subparsers.add_parser(
+        "migrate", help = "Migrate to a particular revision.",
+    )
+
+    migrate_parser.add_argument(
+        "revision_spec",
+        type = str,
+        help = """
+            Supported revision specifiers are: an exact number, e.g. "12", will
+            upgrade or downgrade depending on the current revision; a relative
+            offset, e.g. "+1" or "-1", will upgrade or downgrade this number of
+            revisions relative to the current revision; the "latest", will
+            upgrade to the revision with the highest revision number.
+        """,
+    )
+
+    list_parser = subparsers.add_parser(
+        "list", help = "Print all known migrations.",
+    )
+
+    status_parser = subparsers.add_parser(
+        "status", help = "Show current revision and pending migrations.",
+    )
+
+    args = parser.parse_args()
+
+    match args.subparser:
+        case "migrate":
+            migrate(args.revision_spec)
+        case "list":
+            list()
+        case "status":
+            status()
 
 
-@main.command()
-@click.argument("revision_spec", default="latest", required=False)
 def migrate(revision_spec: str) -> None:
-    """
-    Migrate to a particular revision. Supported revision specifiers are:
-
-    * An exact number, e.g. "12". Will upgrade or downgrade depending on the
-      current revision.
-
-    * A relative offset, e.g. "+1" or "-1". Will upgrade or downgrade this
-      number of revisions relative to the current revision.
-
-    * The "latest", which upgrades to the revision with the highest revision
-      number. This is the default.
-    """
     app = Migrator.new()
 
     current = app.get_current_revision()
@@ -255,22 +279,14 @@ def migrate(revision_spec: str) -> None:
         app.execute_migrations(new_rev, ((d, m.sql_down) for (d, m) in zip(defs, migs)))
 
 
-@main.command()
 def list() -> None:
-    """
-    Print all known migrations.
-    """
     migrations = sorted(list_migrations())
     validate_migrations(migrations)
     for i, name, fname in reversed(migrations):
         print(f"{i:04} {name}")
 
 
-@main.command()
 def status() -> None:
-    """
-    Show current revision and pending migrations.
-    """
     app = Migrator.new()
     current = app.get_current_revision()
     latest = len(app.revisions)
