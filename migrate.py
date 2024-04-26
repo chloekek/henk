@@ -83,12 +83,12 @@ class MigrationDef(NamedTuple):
     name: str
     fname: str
 
-    def load(self) -> Migration:
-        return Migration.from_file(f"migrations/{self.fname}")
+    def load(self, mig_dir: str) -> Migration:
+        return Migration.from_file(f"{mig_dir}/{self.fname}")
 
 
-def list_migrations() -> Iterable[MigrationDef]:
-    for fname in os.listdir("migrations"):
+def list_migrations(mig_dir: str) -> Iterable[MigrationDef]:
+    for fname in os.listdir(mig_dir):
         if not fname.endswith(".sql"):
             continue
 
@@ -129,8 +129,8 @@ class Migrator(NamedTuple):
     revisions: List[MigrationDef]
 
     @staticmethod
-    def new() -> Migrator:
-        revisions = sorted(list_migrations())
+    def new(mig_dir: str) -> Migrator:
+        revisions = sorted(list_migrations(mig_dir))
         validate_migrations(revisions)
         return Migrator(revisions)
 
@@ -213,6 +213,13 @@ def main() -> None:
         description = "PostgreSQL schema migration tool.",
     )
 
+    parser.add_argument(
+        "--migrations-dir",
+        type = str,
+        default = "migrations",
+        help = "Path to the directory that contains the migration files.",
+    )
+
     subparsers = parser.add_subparsers(dest = "subparser")
 
     migrate_parser = subparsers.add_parser(
@@ -243,15 +250,15 @@ def main() -> None:
 
     match args.subparser:
         case "migrate":
-            migrate(args.revision_spec)
+            migrate(args.revision_spec, args.migrations_dir)
         case "list":
-            list()
+            list(args.migrations_dir)
         case "status":
-            status()
+            status(args.migrations_dir)
 
 
-def migrate(revision_spec: str) -> None:
-    app = Migrator.new()
+def migrate(revision_spec: str, mig_dir: str) -> None:
+    app = Migrator.new(mig_dir)
 
     current = app.get_current_revision()
     new_rev = app.parse_revision_spec(current, revision_spec)
@@ -269,25 +276,25 @@ def migrate(revision_spec: str) -> None:
         # Note, the index is one lower than the revision at that index, so we
         # slice all new migrations that we still need to run.
         defs = app.revisions[current:new_rev]
-        migs = [mig_def.load() for mig_def in defs]
+        migs = [mig_def.load(mig_dir) for mig_def in defs]
         app.execute_migrations(new_rev, ((d, m.sql_up) for (d, m) in zip(defs, migs)))
 
     elif new_rev < current:
         print(f"Downgrading: {current:04} -> {new_rev:04}")
         defs = [d for d in reversed(app.revisions[new_rev:current])]
-        migs = [mig_def.load() for mig_def in defs]
+        migs = [mig_def.load(mig_dir) for mig_def in defs]
         app.execute_migrations(new_rev, ((d, m.sql_down) for (d, m) in zip(defs, migs)))
 
 
-def list() -> None:
-    migrations = sorted(list_migrations())
+def list(mig_dir: str) -> None:
+    migrations = sorted(list_migrations(mig_dir))
     validate_migrations(migrations)
     for i, name, fname in reversed(migrations):
         print(f"{i:04} {name}")
 
 
-def status() -> None:
-    app = Migrator.new()
+def status(mig_dir: str) -> None:
+    app = Migrator.new(mig_dir)
     current = app.get_current_revision()
     latest = len(app.revisions)
     if current > 0:
