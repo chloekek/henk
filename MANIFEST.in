@@ -1,3 +1,0 @@
-graft hanson/static
-graft hanson/templates
-global-exclude *.pyc
